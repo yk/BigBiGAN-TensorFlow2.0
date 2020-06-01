@@ -110,8 +110,8 @@ def train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_
         with tf.GradientTape() as tape:
             g_e_loss, d_loss = forward_pass_fn_g_const(image, label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, batch_size, cont_dim, config)
             grad_for_g = [-g for g in tape.gradient(d_loss, g_vars)]
-        dg_optimizer_d.apply_gradients(grad_for_d, d_vars)
-        dg_optimizer_g.apply_gradients(grad_for_g, g_vars)
+        dg_optimizer_d.apply_gradients(zip(grad_for_d, d_vars))
+        dg_optimizer_g.apply_gradients(zip(grad_for_g, g_vars))
 
 
 def get_forward_pass_fn():
