@@ -8,10 +8,16 @@ import tqdm
 def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_repeat, model_copies=None):
     train_data_iterator = iter(train_data_repeat)
     image, label = next(train_data_iterator)
-    forward_pass_fn_d_const = get_forward_pass_fn()
-    forward_pass_fn_g_const = get_forward_pass_fn()
-    forward_pass_fn_d_const(image, label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], config.train_batch_size, config.num_cont_noise, config, update_d=False)
-    forward_pass_fn_g_const(image, label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, config.train_batch_size, config.num_cont_noise, config, update_g=False)
+
+    if config.train_dg:
+        forward_pass_fn_d_const = get_forward_pass_fn()
+        forward_pass_fn_g_const = get_forward_pass_fn()
+        forward_pass_fn_d_const(image, label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], config.train_batch_size, config.num_cont_noise, config, update_d=False)
+        forward_pass_fn_g_const(image, label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, config.train_batch_size, config.num_cont_noise, config, update_g=False)
+    else:
+        forward_pass_fn_d_const = get_forward_pass_fn()
+        forward_pass_fn_d_const(image, label, gen, disc_f, disc_h, disc_j, model_en, config.train_batch_size, config.num_cont_noise, config)
+        forward_pass_fn_g_const = None
 
     # Start training
     # Define optimizers
@@ -32,8 +38,9 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
                                        beta_2=config.beta_2_gen_en)
 
 
+    out_dir = f'{config.result_path}/{config.model}_{config.dataset}_{time.strftime("%Y-%m-%d--%H-%M-%S")}'
     # Define Logging to Tensorboard
-    summary_writer = tf.summary.create_file_writer(f'{config.result_path}/{config.model}_{config.dataset}_{time.strftime("%Y-%m-%d--%H-%M-%S")}')
+    summary_writer = tf.summary.create_file_writer(out_dir)
 
     fixed_z, fixed_c = get_fixed_random(config, num_to_generate=100)  # fixed_noise is just used for visualization.
 
@@ -42,10 +49,19 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
     metric_loss_disc = tf.keras.metrics.Mean()
     metric_loss_dg = tf.keras.metrics.Mean()
 
-    train_step_fn_d_const = get_train_step_fn(forward_pass_fn_d_const)
-    train_step_fn_g_const = get_train_step_fn(forward_pass_fn_g_const)
-    train_step_fn_d_const(image, label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, config.train_batch_size, config.num_cont_noise, config, update_d=False)
-    train_step_fn_g_const(image, label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, config.train_batch_size, config.num_cont_noise, config, update_g=False)
+    if config.train_dg:
+        train_step_fn_d_const = get_train_step_fn(forward_pass_fn_d_const)
+        train_step_fn_g_const = get_train_step_fn(forward_pass_fn_g_const)
+        train_step_fn_d_const(image, label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, config.train_batch_size, config.num_cont_noise, config, update_d=False)
+        train_step_fn_g_const(image, label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, config.train_batch_size, config.num_cont_noise, config, update_g=False)
+    else:
+        train_step_fn_d_const = get_train_step_fn(forward_pass_fn_d_const)
+        train_step_fn_d_const(image, label, gen, disc_f, disc_h, disc_j, model_en, disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, config.train_batch_size, config.num_cont_noise, config)
+        train_step_fn_g_const = None
+
+    ckpt = tf.train.Checkpoint(gen=gen, disc_f=disc_f, disc_h=disc_h, disc_j=disc_j, model_en=model_en)
+    ckpt_mgr = tf.train.CheckpointManager(ckpt, out_dir + '/checkpoints/', config.num_epochs+1)
+    ckpt_mgr.save(0)
 
     # Start training
     epoch_tf = tf.Variable(0, trainable=False, dtype=tf.float32)
@@ -73,6 +89,7 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
         gen_image = generate_images(gen, fixed_z, fixed_c, config)
         with summary_writer.as_default():
             tf.summary.image('Generated Images', tf.expand_dims(gen_image,axis=0),step=epoch)
+        ckpt_mgr.save(epoch+1)
 
 
 def make_optimizer(lr, beta1, beta2):
@@ -95,24 +112,30 @@ def train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_
             disc_optimizer.set_weights(dg_optimizer_d.get_weights())
             gen_en_optimizer.set_weights(dg_optimizer_g.get_weights())
     for image, label in tqdm.tqdm(train_data):
-        copy_vars()
-        for _ in range(config.steps_dg):
-            inner_image, inner_label = next(train_data_iterator)
-            train_step_fn_d_const(inner_image, inner_label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, batch_size, cont_dim, config, update_d=False)
-        with tf.GradientTape() as tape:
-            g_e_loss, d_loss_d_const = forward_pass_fn_d_const(image, label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], batch_size, cont_dim, config)
-            grad_for_d = tape.gradient(d_loss_d_const, d_vars)
+        if config.train_dg:
+            copy_vars()
+            for _ in range(config.steps_dg):
+                inner_image, inner_label = next(train_data_iterator)
+                train_step_fn_d_const(inner_image, inner_label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, batch_size, cont_dim, config, update_d=False)
+            with tf.GradientTape() as tape:
+                g_e_loss, d_loss_d_const = forward_pass_fn_d_const(image, label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], batch_size, cont_dim, config)
+                grad_for_d = tape.gradient(d_loss_d_const, d_vars)
 
-        copy_vars()
-        for _ in range(config.steps_dg):
-            inner_image, inner_label = next(train_data_iterator)
-            train_step_fn_g_const(inner_image, inner_label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, batch_size, cont_dim, config, update_g=False)
-        with tf.GradientTape() as tape:
-            g_e_loss, d_loss_g_const = forward_pass_fn_g_const(image, label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, batch_size, cont_dim, config)
-            grad_for_g = [-g for g in tape.gradient(d_loss_g_const, g_vars)]
-        dg_optimizer_d.apply_gradients(zip(grad_for_d, d_vars))
-        dg_optimizer_g.apply_gradients(zip(grad_for_g, g_vars))
-        metric_loss_dg.update_state(d_loss_d_const - d_loss_g_const)
+            copy_vars()
+            for _ in range(config.steps_dg):
+                inner_image, inner_label = next(train_data_iterator)
+                train_step_fn_g_const(inner_image, inner_label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, batch_size, cont_dim, config, update_g=False)
+            with tf.GradientTape() as tape:
+                g_e_loss, d_loss_g_const = forward_pass_fn_g_const(image, label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, batch_size, cont_dim, config)
+                grad_for_g = [-g for g in tape.gradient(d_loss_g_const, g_vars)]
+            dg_optimizer_d.apply_gradients(zip(grad_for_d, d_vars))
+            dg_optimizer_g.apply_gradients(zip(grad_for_g, g_vars))
+            metric_loss_dg.update_state(d_loss_d_const - d_loss_g_const)
+        else:
+            train_step_fn_d_const(image, label, gen, disc_f, disc_h, disc_j, model_en, disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, batch_size, cont_dim, config)
+
+        if config.debug:
+            break
 
 
 def get_forward_pass_fn():

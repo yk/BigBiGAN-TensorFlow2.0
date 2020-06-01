@@ -42,6 +42,9 @@ flags.DEFINE_integer('num_cont_noise', 100, 'Dimension of continous noise vector
 flags.DEFINE_bool('conditional', True, 'Conditional or unconditional GAN')
 flags.DEFINE_integer('num_emb', 10, 'Dimension of embedded label output. Only applicable when conditional')
 
+flags.DEFINE_bool('train_dg', False, 'Train using DG')
+flags.DEFINE_bool('debug', False, '')
+
 
 def main(argv):
     del argv  # Unused.
