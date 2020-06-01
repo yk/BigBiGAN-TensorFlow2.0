@@ -9,17 +9,19 @@ def set_up_train(config):
     # Setup tensorflow
     tf.config.threading.set_inter_op_parallelism_threads(4)
     tf.config.threading.set_intra_op_parallelism_threads(4)
-    physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    if 'GPU' in config.device:
+        physical_devices = tf.config.experimental.list_physical_devices(config.device)
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
     # Load dataset
     logging.info('Getting dataset...')
-    train_data, _ = get_dataset(config)
+    train_data_raw, _ = get_dataset(config)
 
     # setup input pipeline
     logging.info('Generating input pipeline...')
-    train_data = get_train_pipeline(train_data, config)
+    train_data = get_train_pipeline(train_data_raw, config)
+    train_data_repeat = get_train_pipeline(train_data_raw, config, repeat=True)
 
     # get model
     logging.info('Prepare model for training...')
@@ -32,6 +34,12 @@ def set_up_train(config):
     model_discriminator_j = BIGBIGAN_D_J(config, weight_init)
     model_encoder = BIGBIGAN_E(config, weight_init)
 
+    model_copies = {}
+    for m in (model_generator, model_discriminator_f, model_discriminator_h, model_discriminator_j, model_encoder):
+        with tf.name_scope('copy'):
+            model_copies[m] = m.__class__(config, weight_init)
+
+
     # train
     logging.info('Start training...')
 
@@ -41,6 +49,6 @@ def set_up_train(config):
           disc_h=model_discriminator_h,
           disc_j=model_discriminator_j,
           model_en=model_encoder,
-          train_data=train_data)
+          train_data=train_data, train_data_repeat=train_data_repeat, model_copies=model_copies)
     # Finished
     logging.info('Training finished ;)')

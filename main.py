@@ -6,14 +6,14 @@ FLAGS = flags.FLAGS
 
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 flags.DEFINE_string("model", 'BigBiGAN', 'Model to use (BigBiGAN|')
 flags.DEFINE_string("dataset",'cifar10','Dataset (mnist|fashion_mnist|cifar10)')
 flags.DEFINE_integer('num_classes', 10, 'Numbers of classes in the dataset')
-flags.DEFINE_string('dataset_path', './tensorflow_datasets','Path for saving dataset.')
-flags.DEFINE_string('result_path', './results','Path for saving results.')
+flags.DEFINE_string('dataset_path', '/tmp/tensorflow_datasets','Path for saving dataset.')
+flags.DEFINE_string('result_path', './logs','Path for saving results.')
 flags.DEFINE_integer('logging_step',100,'Step number for logging')
 flags.DEFINE_integer('data_buffer_size',1000,'Buffersize input pipeline.')
 flags.DEFINE_integer('train_batch_size',256 ,'Batch size for training.')
@@ -22,6 +22,9 @@ flags.DEFINE_string('device', 'GPU', 'Device using now(CPU|GPU)')
 
 flags.DEFINE_integer('gen_disc_ch',64,'Number of channels in the first layer of generator and discriminator_f.')
 flags.DEFINE_integer('en_ch',32,'Number of channels in the first layer of encoder.')
+
+flags.DEFINE_float('lr_dg',2e-4,'Learning rate DG.')
+flags.DEFINE_integer('steps_dg',10,'Steps DG.')
 
 flags.DEFINE_float('lr_gen_en',2e-4,'Learning rate generator.')
 flags.DEFINE_float('beta_1_gen_en',0.5,'Beta_1 of Generator optimizer.')

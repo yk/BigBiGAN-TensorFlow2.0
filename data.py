@@ -19,10 +19,12 @@ def get_dataset(config):
     return train_data, test_data
 
 
-def get_train_pipeline(dataset,config):
+def get_train_pipeline(dataset,config, repeat=False):
     dataset = dataset.map(scale, num_parallel_calls=NUM_CALLS)
     if(config.cache_dataset):
         dataset = dataset.cache()
+    if repeat:
+        dataset = dataset.repeat()
     dataset = dataset.shuffle(config.data_buffer_size).batch(config.train_batch_size,drop_remainder=True).prefetch(NUM_PREFETCH)
     return dataset
 
