@@ -23,9 +23,13 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
                                         beta_1=config.beta_1_gen_en,
                                        beta_2=config.beta_2_gen_en)
 
-    dg_optimizer = tf.optimizers.Adam(learning_rate=config.lr_dg,
+    dg_optimizer_d = tf.optimizers.Adam(learning_rate=config.lr_dg,
                                         beta_1=config.beta_1_disc,
                                        beta_2=config.beta_2_disc)
+
+    dg_optimizer_g = tf.optimizers.Adam(learning_rate=config.lr_dg,
+                                        beta_1=config.beta_1_gen_en,
+                                       beta_2=config.beta_2_gen_en)
 
 
     # Define Logging to Tensorboard
@@ -50,7 +54,7 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
         epoch_tf.assign(epoch)
         start_time = time.time()
 
-        train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_const, forward_pass_fn_g_const, train_data, train_data_iterator, gen,disc_f, disc_h, disc_j, model_en, disc_optimizer, gen_en_optimizer, dg_optimizer, metric_loss_disc,
+        train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_const, forward_pass_fn_g_const, train_data, train_data_iterator, gen,disc_f, disc_h, disc_j, model_en, disc_optimizer, gen_en_optimizer, dg_optimizer_g, dg_optimizer_d, metric_loss_disc,
                     metric_loss_gen_en, metric_loss_dg, config.train_batch_size, config.num_cont_noise, config, model_copies=model_copies)
         epoch_time = time.time()-start_time
 
@@ -78,7 +82,7 @@ def make_optimizer(lr, beta1, beta2):
     return optimizer
 
 
-def train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_const, forward_pass_fn_g_const, train_data, train_data_iterator, gen,disc_f, disc_h, disc_j, model_en, disc_optimizer,gen_en_optimizer, dg_optimizer,
+def train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_const, forward_pass_fn_g_const, train_data, train_data_iterator, gen,disc_f, disc_h, disc_j, model_en, disc_optimizer,gen_en_optimizer, dg_optimizer_g, dg_optimizer_d,
                 metric_loss_disc, metric_loss_gen_en, metric_loss_dg, batch_size, cont_dim, config, model_copies):
     all_models = gen, disc_f, disc_h, disc_j, model_en
     d_vars = disc_f.trainable_variables+disc_h.trainable_variables+disc_j.trainable_variables
@@ -87,11 +91,9 @@ def train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_
         for m in all_models:
             for v, vc in zip(m.variables, model_copies[m].variables):
                 vc.assign(v)
-        dgw = dg_optimizer.get_weights()
-        if dgw:
-            num_d_weights = 1 + 2 * len(d_vars)
-            disc_optimizer.set_weights(dgw[:num_d_weights])
-            gen_en_optimizer.set_weights(dgw[num_d_weights:])
+        if dg_optimizer_g.get_weights():
+            disc_optimizer.set_weights(dg_optimizer_d.get_weights())
+            gen_en_optimizer.set_weights(dg_optimizer_g.get_weights())
     for image, label in tqdm.tqdm(train_data):
         copy_vars()
         for _ in range(config.steps_dg):
@@ -108,7 +110,8 @@ def train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_
         with tf.GradientTape() as tape:
             g_e_loss, d_loss = forward_pass_fn_g_const(image, label, gen, model_copies[disc_f], model_copies[disc_h], model_copies[disc_j], model_en, batch_size, cont_dim, config)
             grad_for_g = [-g for g in tape.gradient(d_loss, g_vars)]
-        dg_optimizer.apply_gradients(zip(grad_for_d+grad_for_g, d_vars+g_vars))
+        dg_optimizer_d.apply_gradients(grad_for_d, d_vars)
+        dg_optimizer_g.apply_gradients(grad_for_g, g_vars)
 
 
 def get_forward_pass_fn():
