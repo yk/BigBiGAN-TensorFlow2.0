@@ -29,7 +29,7 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
     train_data_iterator = iter(train_data_repeat)
     image, label = next(train_data_iterator)
 
-    if config.train_dg or config.do_eval:
+    if config.train_dg or config.do_eval or config.load_model:
         forward_pass_fn_d_const = get_forward_pass_fn()
         forward_pass_fn_g_const = get_forward_pass_fn()
         forward_pass_fn_d_const(image, label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], config.train_batch_size, config.num_cont_noise, config, update_d=False)
@@ -69,7 +69,7 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
     metric_loss_disc = tf.keras.metrics.Mean()
     metric_loss_dg = tf.keras.metrics.Mean()
 
-    if config.train_dg or config.do_eval:
+    if config.train_dg or config.do_eval or config.load_model:
         train_step_fn_d_const = get_train_step_fn(forward_pass_fn_d_const)
         train_step_fn_g_const = get_train_step_fn(forward_pass_fn_g_const)
         train_step_fn_d_const(image, label, model_copies[gen], disc_f, disc_h, disc_j, model_copies[model_en], disc_optimizer, gen_en_optimizer, metric_loss_disc, metric_loss_gen_en, config.train_batch_size, config.num_cont_noise, config, update_d=False)
@@ -88,13 +88,13 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
 
     # Start training
     epoch_tf = tf.Variable(0, trainable=False, dtype=tf.float32)
-    for epoch in range(config.num_epochs + config.do_eval):
+    for epoch in range(0, config.num_epochs, 9):
         logging.info(f'Start epoch {epoch+1} ...')  # logs a message.
         epoch_tf.assign(epoch)
         start_time = time.time()
 
         if config.do_eval:
-            ckpt.restore(str(checkpoint_dir) + f'/ckpt-{epoch}').assert_consumed()
+            ckpt.restore(str(checkpoint_dir) + f'/ckpt-{epoch+1}').assert_consumed()
 
         train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_const, forward_pass_fn_g_const, train_data, train_data_iterator, gen,disc_f, disc_h, disc_j, model_en, disc_optimizer, gen_en_optimizer, dg_optimizer_g, dg_optimizer_d, metric_loss_disc,
                     metric_loss_gen_en, metric_loss_dg, config.train_batch_size, config.num_cont_noise, config, model_copies=model_copies)
@@ -139,7 +139,7 @@ def train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_
             disc_optimizer.set_weights(dg_optimizer_d.get_weights())
             gen_en_optimizer.set_weights(dg_optimizer_g.get_weights())
     for outer_step, (image, label) in enumerate(tqdm.tqdm(train_data)):
-        if config.train_dg or config.do_eval:
+        if config.train_dg or config.do_eval or config.load_model:
             if outer_step == 0 or not config.do_eval:
                 copy_vars([gen, model_en])
                 steps_dg = config.steps_dg_eval if config.do_eval else config.steps_dg
