@@ -25,6 +25,7 @@ flags.DEFINE_integer('en_ch',32,'Number of channels in the first layer of encode
 
 flags.DEFINE_float('lr_dg',2e-4,'Learning rate DG.')
 flags.DEFINE_integer('steps_dg',10,'Steps DG.')
+flags.DEFINE_integer('steps_dg_eval',100,'Steps DG.')
 
 flags.DEFINE_float('lr_gen_en',2e-4,'Learning rate generator.')
 flags.DEFINE_float('beta_1_gen_en',0.5,'Beta_1 of Generator optimizer.')
@@ -44,6 +45,9 @@ flags.DEFINE_integer('num_emb', 10, 'Dimension of embedded label output. Only ap
 
 flags.DEFINE_bool('train_dg', False, 'Train using DG')
 flags.DEFINE_bool('debug', False, '')
+flags.DEFINE_bool('save_model', False, '')
+flags.DEFINE_bool('load_model', False, '')
+flags.DEFINE_bool('do_eval', False, '')
 
 
 def main(argv):

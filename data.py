@@ -1,6 +1,7 @@
 import logging
 import tensorflow_datasets as tfds
 import tensorflow as tf
+import filelock
 
 NUM_CALLS = tf.data.experimental.AUTOTUNE
 NUM_PREFETCH = tf.data.experimental.AUTOTUNE
@@ -12,9 +13,11 @@ def scale(image, label):
     image = tf.image.resize(image, [32,32])
     return image, label
 
+lock = filelock.FileLock('/tmp/tfds.lock')
 
 def get_dataset(config):
-    datasets, ds_info = tfds.load(name=config.dataset, with_info=True, as_supervised=True, data_dir=config.dataset_path)
+    with lock:
+        datasets, ds_info = tfds.load(name=config.dataset, with_info=True, as_supervised=True, data_dir=config.dataset_path)
     train_data, test_data = datasets['train'], datasets['test']
     return train_data, test_data
 
