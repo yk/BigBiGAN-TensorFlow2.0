@@ -12,7 +12,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("model", 'BigBiGAN', 'Model to use (BigBiGAN|')
 flags.DEFINE_string("dataset",'cifar10','Dataset (mnist|fashion_mnist|cifar10)')
 flags.DEFINE_integer('num_classes', 10, 'Numbers of classes in the dataset')
-flags.DEFINE_string('dataset_path', '/tmp/tensorflow_datasets','Path for saving dataset.')
+flags.DEFINE_string('dataset_path', '~/tensorflow_datasets','Path for saving dataset.')
 flags.DEFINE_string('result_path', './logs','Path for saving results.')
 flags.DEFINE_integer('logging_step',100,'Step number for logging')
 flags.DEFINE_integer('data_buffer_size',1000,'Buffersize input pipeline.')

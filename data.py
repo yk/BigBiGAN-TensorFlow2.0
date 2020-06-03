@@ -18,7 +18,7 @@ lock = filelock.FileLock(os.path.expanduser('~/.tfds.lock'))
 
 def get_dataset(config):
     with lock:
-        datasets, ds_info = tfds.load(name=config.dataset, with_info=True, as_supervised=True, data_dir=config.dataset_path)
+        datasets, ds_info = tfds.load(name=config.dataset, with_info=True, as_supervised=True, data_dir=os.path.expanduser(config.dataset_path))
     train_data, test_data = datasets['train'], datasets['test']
     return train_data, test_data
 
