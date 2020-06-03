@@ -9,20 +9,26 @@ import tqdm
 def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_repeat, model_copies=None):
 
     if config.load_model or config.do_eval:
-        config_dir = Path('~/models/dg/exp/configs').expanduser()
+        if config.load_from_further:
+            config_dir = Path('~/models/dg_further/configs').expanduser()
+        else:
+            config_dir = Path('~/models/dg/exp/configs').expanduser()
         for cdir in config_dir.iterdir():
             ldir = cdir / 'logs'
-            cmdline = (ldir / 'cmdlog.txt').read_text()
-            cparams = dict(k[2:].split('=') for k in cmdline.split() if k.startswith('--'))
-            print(cparams)
-            if (
-                    cparams['dataset'] == config.dataset and
-                    cparams['train_dg'] == str(config.train_dg) and
-                    cparams['steps_dg'] == str(config.steps_dg) and
-                    cparams['conditional'] == str(config.conditional)
-                    ):
-                checkpoint_dir = list(ldir.glob('*/checkpoints'))[0]
-                break
+            try:
+                cmdline = (ldir / 'cmdlog.txt').read_text()
+                cparams = dict(k[2:].split('=') for k in cmdline.split() if k.startswith('--'))
+                print(cparams)
+                if (
+                        cparams['dataset'] == config.dataset and
+                        cparams['train_dg'] == str(config.train_dg) and
+                        cparams['steps_dg'] == str(config.steps_dg) and
+                        cparams['conditional'] == str(config.conditional)
+                        ):
+                    checkpoint_dir = list(ldir.glob('*/checkpoints'))[0]
+                    break
+            except:
+                pass
         else:
             raise ValueError('Model not found')
 
@@ -88,13 +94,13 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
 
     # Start training
     epoch_tf = tf.Variable(0, trainable=False, dtype=tf.float32)
-    for epoch in range(0, config.num_epochs, 9):
+    for epoch in range(0, config.num_epochs + config.do_eval):
         logging.info(f'Start epoch {epoch+1} ...')  # logs a message.
         epoch_tf.assign(epoch)
         start_time = time.time()
 
         if config.do_eval:
-            ckpt.restore(str(checkpoint_dir) + f'/ckpt-{epoch+1}').assert_consumed()
+            ckpt.restore(str(checkpoint_dir) + f'/ckpt-{epoch}').assert_consumed()
 
         train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_const, forward_pass_fn_g_const, train_data, train_data_iterator, gen,disc_f, disc_h, disc_j, model_en, disc_optimizer, gen_en_optimizer, dg_optimizer_g, dg_optimizer_d, metric_loss_disc,
                     metric_loss_gen_en, metric_loss_dg, config.train_batch_size, config.num_cont_noise, config, model_copies=model_copies)

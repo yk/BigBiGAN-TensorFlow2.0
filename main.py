@@ -47,6 +47,7 @@ flags.DEFINE_bool('train_dg', False, 'Train using DG')
 flags.DEFINE_bool('debug', False, '')
 flags.DEFINE_bool('save_model', False, '')
 flags.DEFINE_bool('load_model', False, '')
+flags.DEFINE_bool('load_from_further', False, '')
 flags.DEFINE_bool('do_eval', False, '')
 
 
