@@ -52,6 +52,7 @@ flags.DEFINE_bool('load_model', False, '')
 flags.DEFINE_bool('load_from_further', False, '')
 flags.DEFINE_bool('do_eval', False, '')
 flags.DEFINE_bool('eval_metrics', False, '')
+flags.DEFINE_bool('only_eval_last', False, '')
 
 
 def main(argv):

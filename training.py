@@ -12,18 +12,18 @@ import itertools as itt
 
 def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, test_data, train_data_repeat, model_copies=None):
     if config.eval_metrics:
-        if config.dataset == 'mnist':
-            @tf.function
-            def get_mnist_eval_metrics(real, fake):
-                frechet = tfgan_mnist.mnist_frechet_distance(real, fake, 1)
-                score = tfgan_mnist.mnist_score(fake, 1)
-                return tf.stack(list(map(tf.stop_gradient, (frechet, score))))
-        elif config.dataset == 'cifar10':
-            @tf.function
-            def get_cifar10_eval_metrics(real, fake):
-                frechet = tfgan_cifar.get_frechet_inception_distance(real, fake, config.train_batch_size, config.train_batch_size)
-                score = tfgan_cifar.get_inception_scores(fake, config.train_batch_size, config.train_batch_size)
-                return tf.stack(list(map(tf.stop_gradient, (frechet, score))))
+
+        @tf.function
+        def get_mnist_eval_metrics(real, fake):
+            frechet = tfgan_mnist.mnist_frechet_distance(real, fake, 1)
+            score = tfgan_mnist.mnist_score(fake, 1)
+            return tf.stack(list(map(tf.stop_gradient, (frechet, score))))
+
+        @tf.function
+        def get_cifar10_eval_metrics(real, fake):
+            frechet = tfgan_cifar.get_frechet_inception_distance(real, fake, config.train_batch_size, config.train_batch_size)
+            score = tfgan_cifar.get_inception_scores(fake, config.train_batch_size, config.train_batch_size)
+            return tf.stack(list(map(tf.stop_gradient, (frechet, score))))
 
     if config.load_model or config.do_eval:
         if config.load_from_further:
@@ -124,7 +124,12 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, test_data, 
             datasets.append((test_data, 'test'))
         for dataset, dataset_name in datasets:
             if config.eval_metrics:
-                num_points_eval = 100 if config.debug else 2000
+                if config.only_eval_last:
+                    if epoch < config.num_epochs:
+                        continue
+                num_points_eval = 10000 if config.only_eval_last else 2000
+                if config.debug:
+                    num_points_eval = 100
                 eval_metrics_batches = num_points_eval // config.train_batch_size + 1
                 num_points_eval = eval_metrics_batches * config.train_batch_size
                 real_images = []
@@ -148,8 +153,10 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, test_data, 
                         frechet.append(f)
                         score.append(s)
                     elif config.dataset == 'fashion_mnist':
-                        frechet.append(0.)
-                        score.append(0.)
+                        real, fake = map(lambda x: tf.concat([x]*3, -1), (real, fake))
+                        f, s = get_cifar10_eval_metrics(real, fake)
+                        frechet.append(f)
+                        score.append(s)
 
                 frechet = sum(frechet) / len(frechet)
                 score = sum(score) / len(score)
