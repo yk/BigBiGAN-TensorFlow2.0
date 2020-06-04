@@ -7,6 +7,8 @@ FLAGS = flags.FLAGS
 
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ['TFHUB_CACHE_DIR'] = os.path.expanduser('~/tmp/tfhub')
+os.makedirs(os.environ['TFHUB_CACHE_DIR'], exist_ok=True)
 
 
 flags.DEFINE_string("model", 'BigBiGAN', 'Model to use (BigBiGAN|')
@@ -49,6 +51,7 @@ flags.DEFINE_bool('save_model', False, '')
 flags.DEFINE_bool('load_model', False, '')
 flags.DEFINE_bool('load_from_further', False, '')
 flags.DEFINE_bool('do_eval', False, '')
+flags.DEFINE_bool('eval_metrics', False, '')
 
 
 def main(argv):

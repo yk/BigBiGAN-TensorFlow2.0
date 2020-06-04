@@ -10,10 +10,12 @@ def get_fixed_random(config, num_to_generate=100):
     return seed_cont, seed_cat
 
 
-def generate_images(generator, z_input, c_input, config):
+def generate_images(generator, z_input, c_input, config, do_plot=True):
     if not config.conditional:
         c_input = None
     predictions = generator(z_input, c_input, training=False)
+    if not do_plot:
+        return predictions
     fig = plt.figure(figsize=(10, 10))
     if config.dataset == 'mnist' or config.dataset == 'fashion_mnist':  # color channel of the dataset
         for i in range(predictions.shape[0]):

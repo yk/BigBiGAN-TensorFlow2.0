@@ -1,12 +1,16 @@
 from pathlib import Path
+import numpy as np
 import tensorflow as tf
 import logging
 import time
 from losses import disc_loss, gen_en_loss
 from misc import get_fixed_random, generate_images
 import tqdm
+import tensorflow_gan.examples.mnist.util as tfgan_mnist
+import tensorflow_gan.examples.cifar.util as tfgan_cifar
+import itertools as itt
 
-def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_repeat, model_copies=None):
+def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, test_data, train_data_repeat, model_copies=None):
 
     if config.load_model or config.do_eval:
         if config.load_from_further:
@@ -102,25 +106,67 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, train_data_
         if config.do_eval:
             ckpt.restore(str(checkpoint_dir) + f'/ckpt-{epoch}').assert_consumed()
 
-        train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_const, forward_pass_fn_g_const, train_data, train_data_iterator, gen,disc_f, disc_h, disc_j, model_en, disc_optimizer, gen_en_optimizer, dg_optimizer_g, dg_optimizer_d, metric_loss_disc,
-                    metric_loss_gen_en, metric_loss_dg, config.train_batch_size, config.num_cont_noise, config, model_copies=model_copies)
-        epoch_time = time.time()-start_time
+        datasets = [ (train_data, 'train') ]
+        if config.do_eval:
+            datasets.append((test_data, 'test'))
+        for dataset, dataset_name in datasets:
+            if config.eval_metrics:
+                num_points_eval = 100 if config.debug else 5000
+                eval_metrics_batches = num_points_eval // config.train_batch_size + 1
+                num_points_eval = eval_metrics_batches * config.train_batch_size
+                real_images = []
+                fake_images = []
+                frechet = []
+                score = []
+                for batch in itt.islice(dataset, 0, eval_metrics_batches):
+                    z, c = get_fixed_random(config, num_to_generate=config.train_batch_size)
+                    fake = generate_images(gen, z, c, config, do_plot=False)
+                    real = batch[0]
+                    if len(real_images) < 200:
+                        real_images.extend([np.array(i) for i in real])
+                        fake_images.extend([np.array(i) for i in fake])
+                    if config.dataset == 'mnist':
+                        real, fake = map(lambda x: tf.image.resize(x, (28, 28)), (real, fake))
+                        frechet.append(tfgan_mnist.mnist_frechet_distance(real, fake, 1))
+                        score.append(tfgan_mnist.mnist_score(fake, 1))
+                    elif config.dataset == 'cifar10':
+                        frechet.append(tfgan_cifar.get_frechet_inception_distance(real, fake, config.train_batch_size, config.train_batch_size))
+                        score.append(tfgan_cifar.get_inception_scores(fake, config.train_batch_size, config.train_batch_size))
+                    elif config.dataset == 'fashion_mnist':
+                        frechet.append(0.)
+                        score.append(0.)
 
-        # Save results
-        logging.info(f'Epoch {epoch+1}: Disc_loss: {metric_loss_disc.result()}, Gen_loss: {metric_loss_gen_en.result()}, Time: {epoch_time}, DG: {metric_loss_dg.result()}')
-        with summary_writer.as_default():
-            tf.summary.scalar('Generator and Encoder loss',metric_loss_gen_en.result(),step=epoch)
-            tf.summary.scalar('Discriminator loss', metric_loss_disc.result(),step=epoch)
-            tf.summary.scalar('Duality Gap',metric_loss_dg.result(),step=epoch)
+                frechet = sum(frechet) / len(frechet)
+                score = sum(score) / len(score)
 
-        metric_loss_gen_en.reset_states()
-        metric_loss_dg.reset_states()
+                with summary_writer.as_default():
+                    tf.summary.scalar(f'Frechet Distance ({dataset_name})',frechet,step=epoch)
+                    tf.summary.scalar(f'Score ({dataset_name})', score,step=epoch)
 
-        metric_loss_disc.reset_states()
-        # Generate images
-        gen_image = generate_images(gen, fixed_z, fixed_c, config)
-        with summary_writer.as_default():
-            tf.summary.image('Generated Images', tf.expand_dims(gen_image,axis=0),step=epoch)
+                real_images, fake_images = map(np.array, (real_images, fake_images))
+                np.save(f'logs/real-{epoch}.npy', real_images)
+                np.save(f'logs/fake-{epoch}.npy', fake_images)
+
+                continue
+        
+            train_epoch(train_step_fn_d_const, train_step_fn_g_const, forward_pass_fn_d_const, forward_pass_fn_g_const, train_data, train_data_iterator, gen,disc_f, disc_h, disc_j, model_en, disc_optimizer, gen_en_optimizer, dg_optimizer_g, dg_optimizer_d, metric_loss_disc, metric_loss_gen_en, metric_loss_dg, config.train_batch_size, config.num_cont_noise, config, model_copies=model_copies)
+            epoch_time = time.time()-start_time
+
+            # Save results
+            logging.info(f'{dataset_name} - Epoch {epoch+1}: Disc_loss: {metric_loss_disc.result()}, Gen_loss: {metric_loss_gen_en.result()}, Time: {epoch_time}, DG: {metric_loss_dg.result()}')
+            with summary_writer.as_default():
+                tf.summary.scalar(f'Generator and Encoder loss ({dataset_name})',metric_loss_gen_en.result(),step=epoch)
+                tf.summary.scalar(f'Discriminator loss ({dataset_name})', metric_loss_disc.result(),step=epoch)
+                tf.summary.scalar(f'Duality Gap ({dataset_name})',metric_loss_dg.result(),step=epoch)
+
+            metric_loss_gen_en.reset_states()
+            metric_loss_dg.reset_states()
+
+            metric_loss_disc.reset_states()
+            # Generate images
+            gen_image = generate_images(gen, fixed_z, fixed_c, config)
+            with summary_writer.as_default():
+                tf.summary.image('Generated Images', tf.expand_dims(gen_image,axis=0),step=epoch)
         if config.save_model:
             ckpt_mgr.save(epoch+1)
 

@@ -16,11 +16,12 @@ def set_up_train(config):
 
     # Load dataset
     logging.info('Getting dataset...')
-    train_data_raw, _ = get_dataset(config)
+    train_data_raw, test_data_raw = get_dataset(config)
 
     # setup input pipeline
     logging.info('Generating input pipeline...')
     train_data = get_train_pipeline(train_data_raw, config)
+    test_data = get_train_pipeline(test_data_raw, config)
     train_data_repeat = get_train_pipeline(train_data_raw, config, repeat=True)
 
     # get model
@@ -49,6 +50,6 @@ def set_up_train(config):
           disc_h=model_discriminator_h,
           disc_j=model_discriminator_j,
           model_en=model_encoder,
-          train_data=train_data, train_data_repeat=train_data_repeat, model_copies=model_copies)
+          train_data=train_data, test_data=test_data, train_data_repeat=train_data_repeat, model_copies=model_copies)
     # Finished
     logging.info('Training finished ;)')
