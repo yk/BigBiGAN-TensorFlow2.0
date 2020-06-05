@@ -19,15 +19,10 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, test_data, 
             score = tfgan_mnist.mnist_score(fake, 1)
             return tf.stack(list(map(tf.stop_gradient, (frechet, score))))
 
-        @tf.function
-        def get_cifar10_eval_metrics(real, fake):
-            frechet = tfgan_cifar.get_frechet_inception_distance(real, fake, config.train_batch_size, config.train_batch_size)
-            score = tfgan_cifar.get_inception_scores(fake, config.train_batch_size, config.train_batch_size)
-            return tf.stack(list(map(tf.stop_gradient, (frechet, score))))
-
     if config.load_model or config.do_eval:
         if config.load_from_further:
-            config_dir = Path('~/models/dg_further/configs').expanduser()
+            # config_dir = Path('~/models/dg_further/configs').expanduser()
+            config_dir = Path('~/models/dg_further_2/configs').expanduser()
         else:
             config_dir = Path('~/models/dg/exp/configs').expanduser()
         for cdir in config_dir.iterdir():
@@ -127,10 +122,10 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, test_data, 
                 if config.only_eval_last:
                     if epoch < config.num_epochs:
                         continue
-                num_points_eval = 10000 if config.only_eval_last else 2000
+                num_points_eval = 10000 if config.only_eval_last else 1000
                 if config.debug:
                     num_points_eval = 100
-                eval_metrics_batches = num_points_eval // config.train_batch_size + 1
+                eval_metrics_batches = num_points_eval // config.train_batch_size
                 num_points_eval = eval_metrics_batches * config.train_batch_size
                 real_images = []
                 fake_images = []
@@ -140,32 +135,33 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, test_data, 
                     z, c = get_fixed_random(config, num_to_generate=config.train_batch_size)
                     fake = generate_images(gen, z, c, config, do_plot=False)
                     real = batch[0]
-                    if len(real_images) < 200:
+                    real, fake = map(lambda x: x * 2. - 1., (real, fake))
+                    if len(real_images) < 200 or config.only_save:
                         real_images.extend([np.array(i) for i in real])
                         fake_images.extend([np.array(i) for i in fake])
+                    if config.only_save:
+                        continue
                     if config.dataset == 'mnist':
-                        real, fake = map(lambda x: tf.image.resize(x, (28, 28)), (real, fake))
+                        real, fake = map(lambda x: tf.image.resize(x, [28, 28]), (real, fake))
                         f, s = get_mnist_eval_metrics(real, fake)
                         frechet.append(f)
                         score.append(s)
                     elif config.dataset == 'cifar10':
-                        f, s = get_cifar10_eval_metrics(real, fake)
-                        frechet.append(f)
-                        score.append(s)
+                        frechet.append(0.)
+                        score.append(0.)
                     elif config.dataset == 'fashion_mnist':
-                        real, fake = map(lambda x: tf.concat([x]*3, -1), (real, fake))
-                        f, s = get_cifar10_eval_metrics(real, fake)
-                        frechet.append(f)
-                        score.append(s)
+                        frechet.append(0.)
+                        score.append(0.)
 
-                frechet = sum(frechet) / len(frechet)
-                score = sum(score) / len(score)
+                frechet = sum(frechet) / max(1, len(frechet))
+                score = sum(score) / max(1, len(score))
 
                 with summary_writer.as_default():
                     tf.summary.scalar(f'Frechet Distance ({dataset_name})',frechet,step=epoch)
                     tf.summary.scalar(f'Score ({dataset_name})', score,step=epoch)
 
                 real_images, fake_images = map(np.array, (real_images, fake_images))
+                real_images, fake_images = map(lambda x: ((x+1.)/2.*255.).round().astype(np.uint8), (real_images, fake_images))
                 np.save(f'logs/real-{epoch}.npy', real_images)
                 np.save(f'logs/fake-{epoch}.npy', fake_images)
 
