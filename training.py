@@ -42,7 +42,7 @@ def train(config, gen, disc_f, disc_h, disc_j, model_en, train_data, test_data, 
             except:
                 pass
         else:
-            raise ValueError('Model not found')
+            raise ValueError('Model not found: {}'.format([config.dataset, config.train_dg, config.steps_dg, config.conditional]))
 
     train_data_iterator = iter(train_data_repeat)
     image, label = next(train_data_iterator)
